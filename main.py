@@ -1,4 +1,5 @@
-import sys, os, time, shutil, subprocess, json, urllib
+import sys, os, time, shutil, subprocess, json, urllib, getpass
+from itertools import cycle
 
 try:
     import spotipy
@@ -45,6 +46,12 @@ def restartSpotify(path):
     time.sleep(5)
     nextTrack()
     previousWindow()
+
+def xor_crypt(data, key):
+    return ''.join(chr(ord(x) ^ ord(y)) for (x,y) in zip(data, cycle(key)))
+
+def is_ascii(s):
+    return all(ord(c) < 128 for c in s)
 
 def setupSpotifyObject(username, scope, clientID, clientSecret, redirectURI):
     token = spotipy.util.prompt_for_user_token(username, scope, clientID,
@@ -152,7 +159,7 @@ if __name__ == '__main__':
             creds = json.load(creds_json)
 
             load = input("Found previously used credentials."
-                         " Want to use them again? (Y/n) "
+                         " Want to use them again? (Y/N) "
                         ).lower()
 
             if load != "y":
@@ -163,10 +170,11 @@ if __name__ == '__main__':
                     print("Unrecognized Input.")
                     creds_json.close()  # The program exits immediately below.
                     sys.exit(0)
-
-            spotify_username = creds["spotify_username"]
-            spotify_client_id = creds["spotify_client_id"]
-            spotify_client_secret = creds["spotify_client_secret"]
+            
+            key = getpass.getpass("Please enter the password used to encrypt your credentials\n")
+            spotify_username = xor_crypt(creds["spotify_username"], key)
+            spotify_client_id = xor_crypt(creds["spotify_client_id"], key)
+            spotify_client_secret = xor_crypt(creds["spotify_client_secret"], key)
 
     except FileNotFoundError:
         spotify_username = input("Ok, what's your Spotify username? ")
@@ -178,10 +186,23 @@ if __name__ == '__main__':
                     ).lower()
         
         if save == "y":
+            key = getpass.getpass("\nChoose a password to encrypt these settings.\nPassword should be at least 8 (ASCII) characters long.\n")
+            if len(key) < 8:
+                print("Password needs to be at least 8 characters long. Exiting.")
+                sys.exit(0)
+            if not is_ascii(key):
+                print("Password can only contain ASCII characters. Exiting.")
+                sys.exit(0)
+            
+            verification = getpass.getpass("Please verify your password.\n")
+            if key != verification:
+                print("Passwords do not match. Exiting.")
+                sys.exit(0)
+
             save_obj = {
-                "spotify_username": spotify_username,
-                "spotify_client_id": spotify_client_id,
-                "spotify_client_secret": spotify_client_secret
+                "spotify_username": xor_crypt(spotify_username, key),
+                "spotify_client_id": xor_crypt(spotify_client_id, key),
+                "spotify_client_secret": xor_crypt(spotify_client_secret, key)
             }
 
             with open("./credentials.json", "w") as creds:
@@ -197,4 +218,3 @@ if __name__ == '__main__':
             print("Didn't recognize input, defaulted to not saving.")
 
     main(spotify_username, spotifyAccessScope, spotify_client_id, spotify_client_secret, spotifyRedirectURI, PATH)
-
